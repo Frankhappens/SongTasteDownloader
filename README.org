@@ -1,0 +1,2 @@
+* SongTasteDownloader
+Simple Ruby script to download songs from http://www.songtaste.com
