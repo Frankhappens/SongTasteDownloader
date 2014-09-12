@@ -1,7 +1,11 @@
 * SongTasteDownloader
 ** Overview
-Simple Ruby script to download songs from http://www.songtaste.com
+Extremely simple Ruby script to download songs from http://www.songtaste.com.
 ** Requirements
+   This script requires following gems:
    : gem install nokogiri
    : gem install ruby-progressbar
    : gem install unicode_utils
+** Usage
+   Just run the script and see what happens!
+   : ruby SongTasteDownloader.rb

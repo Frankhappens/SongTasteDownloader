@@ -13,6 +13,34 @@ $SEARCH_URL = "#{$BASE_URL}/search.php?"
 $TIME_URL = "#{$BASE_URL}/time.php"
 $MUSIC_DIR = File.expand_path '~/Music'
 
+$bold_color_to_code = {
+  'gray'=>'1;30',
+  'red'=> '1;31',
+  'green'=> '1;32',
+  'yellow'=> '1;33',
+  'blue'=> '1;34',
+  'magenta'=> '1;35',
+  'cyan'=> '1;36',
+  'white'=> '1;37',
+  'crimson'=> '1;38',
+  'hred'=> '1;41',
+  'hgreen'=> '1;42',
+  'hbrown'=> '1;43',
+  'hblue'=> '1;44',
+  'hmagenta'=> '1;45',
+  'hcyan'=> '1;46',
+  'hgray'=> '1;47',
+  'hcrimson'=> '1;48',
+}
+
+def color_text(color, *args)
+  text = args.join(' ')
+  code = $bold_color_to_code.fetch(color.downcase(), '0')
+  "\033[#{code}m#{text}\033[0m"
+end
+
+$prompt = color_text("green", ">>=") + ' '
+
 class Song
   attr_accessor :name, :href, :rec_num
   def initialize name, href, rec_num
@@ -72,7 +100,7 @@ def download_song song_url, song_name
                    pbar.progress = s if pbar
                  }).read
   end
-  puts "Download completed!"
+  puts "#{$prompt}Download completed!"
 end
 
 def just_name name, display_width
@@ -82,46 +110,60 @@ def just_name name, display_width
   ' ' * head + name + ' ' * tail
 end
 
-column_names = ["ID", "Name", "Popular"]
-
-song_list = nil
-while true
-  print "Input a search keyword: "
-  response = search(STDIN.gets.chomp)
-  song_list = parse_search_results response
-  if song_list 
-    break
+def search_and_get_song_list
+  song_list = nil
+  while true
+    print "#{$prompt}Input a search keyword: "
+    response = search(STDIN.gets.chomp)
+    song_list = parse_search_results response
+    if song_list 
+      break
+    end
+    puts (color_text 'red', "No results found!")
   end
-  puts "No results found!"
+  song_list
 end
 
-widths = []
-widths << [song_list.length.to_s.length, column_names[0].length].max
-widths << [song_list.map { |s| UnicodeUtils.display_width s.name }.max, column_names[1].length].max
-widths << [song_list.map { |s| s.rec_num.to_s.length }.max, column_names[2].length].max
+def display_song_list song_list
+  column_names = ["ID", "Name", "Popular"]
+  widths = []
+  widths << [song_list.length.to_s.length, column_names[0].length].max
+  widths << [song_list.map { |s| UnicodeUtils.display_width s.name }.max, column_names[1].length].max
+  widths << [song_list.map { |s| s.rec_num.to_s.length }.max, column_names[2].length].max
 
-puts
-column_names = column_names.each_with_index.map { |name, index| just_name(name, widths[index]) }
-puts '| ' + column_names.join(' | ') + ' |'
-puts '|-' + column_names.map { |c| '-' * c.length }.join('-+-') + '-|'
-song_list.each_with_index do |song, index|  
-  printf("| %#{widths[0]}d | %s | %#{widths[2]}d |\n",
-         index + 1,
-         just_name(song.name, widths[1]),
-         song.rec_num)
-end
-puts
-  
-while true
-  print "Select a song ID: "
-  sel_id = STDIN.gets.chomp.to_i - 1
-  if (0..song_list.length) === sel_id
-    break
+  puts
+  column_names = column_names.each_with_index.map { |name, index| just_name(name, widths[index]) }
+  puts '| ' + column_names.join(' | ') + ' |'
+  puts '|-' + column_names.map { |c| '-' * c.length }.join('-+-') + '-|'
+  song_list.each_with_index do |song, index|  
+    printf("| %#{widths[0]}d | %s | %#{widths[2]}d |\n",
+           index + 1,
+           just_name(song.name, widths[1]),
+           song.rec_num)
   end
-  puts "Please input a valid song ID!"
-end
-sel_song = song_list[sel_id]
+  puts
 
-song_url = get_song_url(sel_song.href)
-puts ">>= Song URL: #{song_url}"
-download_song song_url, sel_song.name
+end
+
+def select_and_download_song song_list
+  while true
+    print "#{$prompt}Select a song ID [1-#{song_list.length}]: "
+    sel_id = STDIN.gets.chomp.to_i - 1
+    if (0..song_list.length) === sel_id
+      break
+    end
+    puts (color_text 'red', "Please input a valid song ID!")
+  end
+  sel_song = song_list[sel_id]
+
+  puts "#{$prompt}Selected song: #{sel_song.name}"
+  print "#{$prompt}Retrieving song information..."
+  song_url = get_song_url(sel_song.href)
+  print "\r"
+  puts "#{$prompt}Song URL: #{song_url}"
+  download_song song_url, sel_song.name  
+end
+
+song_list = search_and_get_song_list
+display_song_list song_list
+select_and_download_song song_list 
