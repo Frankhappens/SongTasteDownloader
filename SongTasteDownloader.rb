@@ -5,13 +5,13 @@
 
 require 'open-uri'
 require 'nokogiri'
-require 'progressbar'
+require 'ruby-progressbar'
 require "unicode_utils/display_width"
 
 $BASE_URL = "http://www.songtaste.com"
 $SEARCH_URL = "#{$BASE_URL}/search.php?"
 $TIME_URL = "#{$BASE_URL}/time.php"
-$MUSIC_DIR = File.expand_path '~/tmp'
+$MUSIC_DIR = File.expand_path '~/Music'
 
 class Song
   attr_accessor :name, :href, :rec_num
@@ -38,16 +38,19 @@ def get_song_url href
       :sid => params[-2],
       :t => params[-1]
     response.body
-    # params
   end
 end
 
 def parse_search_results response
-  html = Nokogiri::HTML.parse(response, nil, 'gbk')
   song_list = []
-  html.css('table.u_song_tab')[0].css('tr').each_with_index do |tr, i|
-    song = tr.css('td.singer')[0].css('a')[0]
-    song_list << (Song.new song.text, song['href'], tr.css('div.rec_num')[0].text.to_i)
+  begin
+    html = Nokogiri::HTML.parse(response, nil, 'gbk')
+    html.css('table.u_song_tab')[0].css('tr').each_with_index do |tr, i|
+      song = tr.css('td.singer')[0].css('a')[0]
+      song_list << (Song.new song.text, song['href'], tr.css('div.rec_num')[0].text.to_i)
+    end
+  rescue Exception
+    return nil
   end
   song_list
 end
@@ -59,33 +62,66 @@ def download_song song_url, song_name
     f.print open(song_url,
                  :content_length_proc => lambda { |t|
                    if t && 0 < t
-                     pbar = ProgressBar.new("", t)
-                     pbar.file_transfer_mode
+                     pbar = ProgressBar.create(:title => "#{file_name}",
+                                               :total => t,
+                                               :format => '%a |%b>>%i| %p%% %e',
+                                               :rate_scale => lambda { |rate| rate / 1024 })
                    end
                  },
                  :progress_proc => lambda {|s|
-                   pbar.set s if pbar
+                   pbar.progress = s if pbar
                  }).read
   end
   puts "Download completed!"
 end
 
-print "Input a search keyword: "
-response = search(STDIN.gets.chomp)
-song_list = parse_search_results response
-id_width = song_list.length.to_s.length
-name_width = song_list.map { |s| s.name.length }.max
-rec_num_width = song_list.map { |s| s.rec_num.to_s.length }.max
-song_list.each_with_index do |song, id|
-  # printf "%#{id_width}d: %#{name_width}s, %#{rec_num_width}d\n", id,
-  # song.name, song.rec_num
-  puts "#{id}: #{song.name}, #{song.rec_num}"
+def just_name name, display_width
+  diff = display_width - UnicodeUtils.display_width(name)
+  head = diff / 2
+  tail = diff - head
+  ' ' * head + name + ' ' * tail
 end
-  
 
-print "Pleaes input a song id: "
-sel_id = STDIN.gets.chomp.to_i - 1
+column_names = ["ID", "Name", "Popular"]
+
+song_list = nil
+while true
+  print "Input a search keyword: "
+  response = search(STDIN.gets.chomp)
+  song_list = parse_search_results response
+  if song_list 
+    break
+  end
+  puts "No results found!"
+end
+
+widths = []
+widths << [song_list.length.to_s.length, column_names[0].length].max
+widths << [song_list.map { |s| UnicodeUtils.display_width s.name }.max, column_names[1].length].max
+widths << [song_list.map { |s| s.rec_num.to_s.length }.max, column_names[2].length].max
+
+puts
+column_names = column_names.each_with_index.map { |name, index| just_name(name, widths[index]) }
+puts '| ' + column_names.join(' | ') + ' |'
+puts '|-' + column_names.map { |c| '-' * c.length }.join('-+-') + '-|'
+song_list.each_with_index do |song, index|  
+  printf("| %#{widths[0]}d | %s | %#{widths[2]}d |\n",
+         index + 1,
+         just_name(song.name, widths[1]),
+         song.rec_num)
+end
+puts
+  
+while true
+  print "Select a song ID: "
+  sel_id = STDIN.gets.chomp.to_i - 1
+  if (0..song_list.length) === sel_id
+    break
+  end
+  puts "Please input a valid song ID!"
+end
 sel_song = song_list[sel_id]
 
 song_url = get_song_url(sel_song.href)
+puts ">>= Song URL: #{song_url}"
 download_song song_url, sel_song.name
