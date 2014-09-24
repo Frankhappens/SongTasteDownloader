@@ -60,7 +60,7 @@ end
 def get_song_url href
   open("#{$BASE_URL}/#{href}") do |html|
     m = /playmedia1\((.*)\).*Listen/.match(html.read)[-1]
-    params = m.gsub('\'', '').split(',').map { |item| item.strip }
+    params = m.gsub('\'', '').split(',').map(&:strip)
     response = Net::HTTP.post_form URI($TIME_URL),
       :str => params[2],
       :sid => params[-2],
@@ -77,8 +77,8 @@ def parse_search_results response
       song = tr.css('td.singer')[0].css('a')[0]
       song_list << (Song.new song.text, song['href'], tr.css('div.rec_num')[0].text.to_i)
     end
-  rescue Exception
-    return nil
+  rescue Exception => e
+    puts "#{$prompt}Note: Error occurred when parsing HTML"
   end
   song_list
 end
